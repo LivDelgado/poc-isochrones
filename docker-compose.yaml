@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  api:
+    container_name: isochrones_api
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    expose:
+      - 8000
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.fastapi.rule=Host(`isochrones-api.localhost`)"
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: geospatial_test_db
+      POSTGRES_HOST: pg_container
+      POSTGRES_PORT: 5432
+    depends_on:
+      postgis:
+        condition: service_healthy
+  traefik:
+    container_name: traefik_proxy
+    image: traefik:v2.2
+    ports:
+      - 8008:80
+      - 8081:8080
+    volumes:
+      - "./traefik.toml:/etc/traefik/traefik.toml"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+  postgis:
+    container_name: pg_container
+    image: pgrouting/pgrouting:latest
+    healthcheck:
+      test: [ "CMD", "pg_isready", "-q", "-d", "geospatial_test_db", "-U", "root" ]
+      timeout: 45s
+      interval: 10s
+      retries: 10
+    restart: always
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./database/create-table.sql:/docker-entrypoint-initdb.d/create-table.sql
+      - ./database/insert.sql:/docker-entrypoint-initdb.d/insert.sql
+    environment:
+      POSTGRES_USER: root
+      POSTGRES_PASSWORD: root
+      POSTGRES_DB: geospatial_test_db
+  pgadmin:
+    container_name: pgadmin4_container
+    image: dpage/pgadmin4
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: root
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      postgis:
+        condition: service_healthy
+
+volumes:
+  db-data:
+  pgadmin-data:
